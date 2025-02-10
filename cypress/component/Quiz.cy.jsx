@@ -1,70 +1,67 @@
 import React from 'react';
-import Quiz from '../../client/components/Quiz';
-import { mount } from 'cypress/react'; // For Cypress component testing
+import { mount } from 'cypress/react';
+import Quiz from '../../components/Quiz'; // Adjust the path if needed
+import questions from '../../fixtures/questions.json';
 
-describe('Quiz Component', () => {
-  const mockQuestions = [
-    {
-      question: 'What is 2 + 2?',
-      answers: [
-        { text: '3', isCorrect: false },
-        { text: '4', isCorrect: true },
-      ],
-    },
-    {
-      question: 'What is the capital of France?',
-      answers: [
-        { text: 'Berlin', isCorrect: false },
-        { text: 'Paris', isCorrect: true },
-      ],
-    },
-  ];
+// Mock API response
+Cypress.Commands.add('mockQuestionsApi', () => {
+  cy.intercept('GET', '/api/questions', {
+    statusCode: 200,
+    body: questions,
+  }).as('getQuestions');
+});
 
+describe('Tech Quiz Component Tests', () => {
   beforeEach(() => {
-    cy.stub(global, 'fetch')
-      .resolves({
-        json: () => Promise.resolve(mockQuestions),
-      })
-      .as('getQuestions');
+    cy.mockQuestionsApi();
+    mount(<Quiz />);
   });
 
-  it('renders the start button initially', () => {
-    mount(<Quiz />);
-    cy.contains('button', 'Start Quiz').should('exist');
+  it('should load and display the first question', () => {
+    cy.wait('@getQuestions');
+    cy.contains(questions[0].question).should('be.visible');
   });
 
-  it('starts the quiz and displays the first question', () => {
-    mount(<Quiz />);
-    cy.contains('button', 'Start Quiz').click();
-    cy.contains('What is 2 + 2?').should('exist');
+  it('should display answers and allow selecting one', () => {
+    cy.wait('@getQuestions');
+
+    // Ensure all answer options appear
+    questions[0].answers.forEach((answer) => {
+      cy.contains(answer.text).should('be.visible');
+    });
+
+    // Click on the second answer
+    cy.contains(questions[0].answers[1].text).click();
+
+    // Verify it's selected (adjust based on your component logic)
+    cy.contains(questions[0].answers[1].text).should('have.class', 'selected');
   });
 
-  it('progresses through questions and calculates the score', () => {
-    mount(<Quiz />);
-    cy.contains('button', 'Start Quiz').click();
+  it('should navigate to the next question when answered', () => {
+    cy.wait('@getQuestions');
 
-    // Answer first question correctly
-    cy.contains('button', '2').click();
+    // Answer the first question
+    cy.contains(questions[0].answers[1].text).click();
 
-    // Verify second question appears
-    cy.contains('What is the capital of France?').should('exist');
+    // Click "Next"
+    cy.contains('Next').click();
 
-    // Answer second question incorrectly
-    cy.contains('button', '1').click();
-
-    // Verify quiz completion
-    cy.contains('Quiz Completed').should('exist');
-    cy.contains('Your score: 1/2').should('exist');
+    // Ensure the next question appears
+    cy.contains(questions[1].question).should('be.visible');
   });
 
-  it('restarts the quiz after completion', () => {
-    mount(<Quiz />);
-    cy.contains('button', 'Start Quiz').click();
-    cy.contains('button', '2').click(); // First question
-    cy.contains('button', '1').click(); // Second question
+  it('should display the score after all questions are answered', () => {
+    cy.wait('@getQuestions');
 
-    // Restart the quiz
-    cy.contains('Take New Quiz').click();
-    cy.contains('button', 'Start Quiz').should('exist');
+    // Answer all questions
+    questions.forEach((_, index) => {
+      cy.get('.answer-option').first().click();
+      if (index < questions.length - 1) {
+        cy.contains('Next').click();
+      }
+    });
+
+    // Ensure the final score is displayed
+    cy.contains('Your Score:').should('be.visible');
   });
 });
